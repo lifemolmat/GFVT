@@ -1105,6 +1105,256 @@ class PD:
         self._maybe_legend(ax, show_legend)
         return ax
 
+    def d_Rg(
+        self,
+        pcolor,
+        plabel,
+        ax=None,
+        plim=100,
+        *,
+        mass=False,
+        highlight=True,
+        n_points=100000,
+    ):
+        """Plot the polymer depletion thickness approximation."""
+        self._require_results()
+        ax = self._get_axis(ax)
+        q = self.Rpol_in / self.Rpr_in
+        x_scale = self.phix_peg * (self.mpeg if mass else 1)
+        phi_r = np.asarray(self.phi_R)
+        phi_grid = np.linspace(0, 2000, n_points)
+        phi_grid_approx = np.linspace(0, 2000, n_points)
+
+        depletion = self.Rpr_in * 1e9 * 0.865 * q**0.88 / (1 + 3.95 * phi_grid**1.54) ** 0.44
+        with np.errstate(divide="ignore", invalid="ignore"):
+            depletion_approx = (
+                self.Rpr_in
+                * 1e9
+                * 0.865
+                * q**0.88
+                / (3.95 * phi_grid_approx**1.54) ** 0.44
+            )
+
+        ax.plot(phi_grid * x_scale, depletion, label=plabel, color=pcolor)
+        ax.plot(phi_grid_approx * x_scale, depletion_approx, color=pcolor, linestyle="--", linewidth=1)
+        ax.scatter(phi_r[-1] * x_scale, self.Rpr_in * 1e9 * self.qx_Drop_p[-1], color=pcolor, s=150)
+
+        idx = np.abs(np.asarray(self.Pol_Sup_p) - plim).argmin()
+        start = idx if highlight else 0
+        linewidth = 10 if highlight else 5
+        ax.plot(
+            phi_r[start:] * x_scale,
+            self.Rpr_in * 1e9 * np.asarray(self.qx_Sup_p)[start:],
+            color=pcolor,
+            linewidth=linewidth,
+            alpha=0.6,
+        )
+        return ax
+
+    def pi_scale(
+        self,
+        pcolor,
+        plabel,
+        ax=None,
+        plim=100,
+        *,
+        mass=False,
+        reduced=False,
+        gamma=0.77,
+        highlight=True,
+        secondary_axis=None,
+        n_points=100000,
+    ):
+        """Plot the polymer osmotic pressure scaling curve."""
+        self._require_results()
+        ax = self._get_axis(ax)
+        q = self.Rpol_in / self.Rpr_in
+        x_scale = self.phix_peg * (self.mpeg if mass else 1)
+        y_scale = q**-3 if (mass or reduced) else self.phix_peg
+        phi_r = np.asarray(self.phi_R)
+        phi_grid = np.linspace(0, 2000, n_points)
+        total = phi_grid + 1.62 * phi_grid ** (3 * gamma)
+        polymer = 1.62 * phi_grid ** (3 * gamma)
+
+        ax.plot(phi_grid * x_scale, y_scale * total, label=plabel, color=pcolor)
+        ax.plot(phi_grid * x_scale, y_scale * polymer, color=pcolor, linestyle="--", linewidth=1)
+
+        if highlight:
+            idx = np.abs(np.asarray(self.Pol_Sup_p) - plim).argmin()
+            phi_highlight = phi_r[idx:]
+            total_highlight = phi_highlight + 1.62 * phi_highlight ** (3 * gamma)
+            ax.plot(phi_highlight * x_scale, y_scale * total_highlight, color=pcolor, linewidth=10, alpha=0.6)
+            ax.scatter(
+                phi_r[-1] * x_scale,
+                y_scale * (phi_r[-1] + 1.62 * phi_r[-1] ** (3 * gamma)),
+                color=pcolor,
+                s=150,
+                marker="o",
+            )
+
+        if secondary_axis is None:
+            secondary_axis = not (mass or reduced)
+        if secondary_axis:
+            rb = 8.314
+            temperature = 273.15 + self.TC
+
+            def inverse(x):
+                return 1000 * x / rb / temperature
+
+            def forward(x):
+                return x * rb * temperature / 1000
+
+            secay = ax.secondary_yaxis("right", functions=(forward, inverse))
+            secay.set_ylabel(r"$\Pi$ (kPa)", fontsize=28)
+            secay.tick_params(axis="y", labelsize=24)
+        return ax
+
+    def a_plot(
+        self,
+        pcolor,
+        plabel,
+        ax=None,
+        *,
+        show_hard_sphere=True,
+        linewidth=3,
+    ):
+        """Plot free volume fraction against protein concentration."""
+        self._require_results()
+        ax = self._get_axis(ax)
+        q = self.Rpol_in / self.Rpr_in
+        phi_bsa_sup = np.asarray(self.Pr_Sup_p) / self.phix_bsa
+
+        ax.scatter(self.Pr_Drop_p[-1], self.a_Drop_p[-1], color=pcolor, s=150, marker="o")
+        ax.plot(self.Pr_Drop_p, self.a_Drop_p, label=plabel, color=pcolor, linewidth=linewidth)
+        ax.plot(self.Pr_Sup_p, self.a_Sup_p, color=pcolor, linewidth=linewidth)
+
+        if show_hard_sphere:
+            phi_bsa_range = np.linspace(0, 0.6, 1000)
+            ax.plot(
+                self.Pr_Sup_p,
+                [1 - phi * (1 + qx) ** 3 for qx, phi in zip(self.qx_Sup_p, phi_bsa_sup)],
+                color=pcolor,
+                linewidth=2,
+                linestyle="--",
+            )
+            ax.plot(
+                phi_bsa_range * self.phix_bsa,
+                [1 - phi * (1 + q) ** 3 for phi in phi_bsa_range],
+                color=pcolor,
+                linewidth=1,
+                linestyle="--",
+            )
+        return ax
+
+    def a_plot_peg(self, pcolor, plabel, ax=None, *, linewidth=3):
+        """Plot free volume fraction against polymer concentration."""
+        self._require_results()
+        ax = self._get_axis(ax)
+        ax.scatter(self.Pol_Drop_p[-1], self.a_Drop_p[-1], color=pcolor, s=150, marker="o")
+        ax.plot(self.Pol_Drop_p, self.a_Drop_p, label=plabel, color=pcolor, linewidth=linewidth)
+        ax.plot(self.Pol_Sup_p, self.a_Sup_p, color=pcolor, linewidth=linewidth)
+        return ax
+
+    def g_plot(self, pcolor, plabel, ax=None, *, gamma=0.77):
+        """Plot the polymer contribution weighted by g."""
+        self._require_results()
+        ax = self._get_axis(ax)
+        pressure = self.phix_peg * (np.asarray(self.phi_R) + 1.62 * np.asarray(self.phi_R) ** (3 * gamma))
+        ax.semilogx(self.Pr_Drop_p, pressure * self.g_Drop, label=plabel, color=pcolor, linestyle="--", linewidth=1)
+        ax.semilogx(self.Pr_Sup_p, pressure * self.g_Sup, color=pcolor, linestyle="--", linewidth=1)
+        ax.scatter(self.Pr_Drop_p[-1], pressure[-1] * self.g_Drop[-1], color=pcolor, s=150, marker="o")
+        return ax
+
+    def h_plot(self, pcolor, plabel, ax=None):
+        """Plot h against protein concentration."""
+        self._require_results()
+        ax = self._get_axis(ax)
+        ax.scatter(self.Pr_Drop_p[-1], self.h_Drop[-1], color=pcolor, s=150, marker="o")
+        ax.plot(self.Pr_Drop_p, self.h_Drop, label=plabel, color=pcolor)
+        ax.plot(self.Pr_Sup_p, self.h_Sup, color=pcolor, linewidth=1, linestyle="--")
+        return ax
+
+    def mu_plot(
+        self,
+        pcolor,
+        plabel,
+        ax=None,
+        plim=500,
+        *,
+        depletion=False,
+        reference_band=False,
+    ):
+        """Plot chemical potential curves."""
+        self._require_results()
+        ax = self._get_axis(ax)
+        idx = np.abs(np.asarray(self.Pol_Sup_p) - plim).argmin()
+
+        if depletion:
+            mu_drop = np.asarray(self.Mu_Drop) - np.asarray(self.Mu0_Drop)
+            mu_sup = np.asarray(self.Mu_Sup) - np.asarray(self.Mu0_Sup)
+            ax.scatter(self.Pr_Drop_p[-1], mu_drop[-1], color=pcolor, s=150, marker="o")
+            ax.semilogx(self.Pr_Drop_p, mu_drop, label=plabel, color=pcolor)
+            ax.semilogx(self.Pr_Sup_p, mu_sup, color=pcolor, linewidth=1, linestyle="--")
+            if reference_band:
+                tmpx = np.linspace(1e-3, 10, 1000)
+                tmpy = [12 - 6 * np.log(tmp) for tmp in tmpx]
+                ax.semilogx(tmpx, tmpy, color="gray", linewidth=200, alpha=0.05)
+            return ax
+
+        ax.plot(self.Pr_Sup_p, self.Mu_Sup, label=plabel + " total supernatant", color=pcolor)
+        ax.plot(self.Pr_Drop_p, self.Mu_Drop, label=plabel + " total droplet", color=pcolor)
+        ax.plot(self.Pr_Sup_p[idx:], self.Mu_Sup[idx:], color=pcolor, linewidth=10, alpha=0.6)
+        ax.plot(self.Pr_Drop_p[idx:], self.Mu_Drop[idx:], color=pcolor, linewidth=10, alpha=0.6)
+        ax.scatter(self.Pr_Sup_p[-1], self.Mu_Sup[-1], color=pcolor, marker="*", s=200)
+        ax.plot(self.Pr_Sup_p, self.Mu0_Sup, label=plabel + " HS supernatant", color=pcolor, linestyle="--")
+        ax.plot(self.Pr_Drop_p, self.Mu0_Drop, label=plabel + " HS droplet", color=pcolor, linestyle="--")
+        return ax
+
+    def Pi_Mu_a_plots(self, axes, pcolor, plabel, mpeg=None, *, verbose=False):
+        """Plot pressure, chemical potential, and free-volume summary panels."""
+        self._require_results()
+        q = self.Rpol_in / self.Rpr_in
+        if verbose:
+            print(self.phix_bsa)
+            print(self.phix_peg)
+            print(f"rescale with q = {q:.2f}, phix_peg/q**3={self.phix_peg * q**3:.2f}")
+
+        axes[0].plot(self.Pr_Drop_p, self.Pi_Drop / 1000, label="Droplet Total", color=pcolor)
+        axes[0].plot(self.Pr_Drop_p, (self.Pi_Drop - self.P0_Drop) / 1000, label="Polymer", linestyle="--", color=pcolor)
+        axes[0].plot(self.Pr_Drop_p, self.P0_Drop / 1000, label="Droplet HS", linestyle=":", color=pcolor)
+        axes[0].plot(self.Pr_Sup_p, self.Pi_Sup / 1000, label="Supernatant Total", color=pcolor)
+        axes[0].plot(self.Pr_Sup_p, (self.Pi_Sup - self.P0_Sup) / 1000, label="Polymer", linestyle="--", color=pcolor)
+        axes[0].plot(self.Pr_Sup_p, self.P0_Sup / 1000, label="Sup HS", linestyle=":", color=pcolor)
+        axes[0].set_title(r"$\Pi$ (kPa)")
+        axes[0].set_xlabel(r"$[BSA]_{sup}$ (mM)")
+        axes[0].set_ylabel(r"$\Pi$ (kPa)")
+        axes[0].set_xlim(0, 7)
+        axes[0].set_ylim(0, 300)
+
+        axes[1].plot(self.Pr_Sup_p, self.Mu_Sup, label="Mu Total Supernatant", color=pcolor)
+        axes[1].plot(self.Pr_Drop_p, self.Mu_Drop, label="Mu Total Drop", color=pcolor)
+        axes[1].plot(self.Pr_Sup_p, self.MuR_Sup, label="Mu Depletion Supernatant", color=pcolor, linestyle="--")
+        axes[1].plot(self.Pr_Drop_p, self.MuR_Drop, label="Mu Depletion Drop", color=pcolor, linestyle="--")
+        axes[1].plot(self.Pr_Sup_p, self.Mu0_Sup, label="Mu HS Supernatant", color=pcolor, linestyle="-.")
+        axes[1].plot(self.Pr_Drop_p, self.Mu0_Drop, label="Mu HS Drop", color=pcolor, linestyle="-.")
+        axes[1].set_title("Chemical Potential")
+        axes[1].set_xlabel(r"$[BSA]_{sup}$ (mM)")
+        axes[1].set_ylabel(r"$\mu_{BSA}/kT$")
+        axes[1].set_xlim(0, 8)
+        axes[1].set_ylim(-100, 50)
+        axes[1].set_xscale("log")
+
+        q_bsa_drop = [1 - a for a in self.a_Drop_p]
+        q_bsa_sup = [1 - a for a in self.a_Sup_p]
+        c_peg_drop = [fpeg * q**1.63 * qx**1.5 for qx, fpeg in zip(self.qx_Drop_p, self.Pol_Drop_p)]
+        c_peg_sup = [fpeg * q**1.63 * qx**1.5 for qx, fpeg in zip(self.qx_Sup_p, self.Pol_Sup_p)]
+        axes[2].plot(q_bsa_drop, c_peg_drop, label="Droplet alpha", linestyle="-", color=pcolor)
+        axes[2].plot(q_bsa_sup, c_peg_sup, label="Supernatant alpha", linestyle="-", color=pcolor)
+        axes[2].set_title("Free volume fraction")
+        axes[2].set_xlabel(r"$[BSA]_{sup}$ (mM)")
+        axes[2].set_ylabel("Free volume fraction")
+        return axes
+
     def to_legacy_list(self) -> list[Any]:
         """Return results in the notebook's original 32-item list order."""
         return [getattr(self, field) for field in RETURN_FIELDS]

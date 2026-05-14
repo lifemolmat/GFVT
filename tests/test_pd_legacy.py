@@ -152,6 +152,7 @@ def test_pd_plotting_methods_return_axes():
     with PICKLE_PATH.open("rb") as handle:
         loaded = pickle.load(handle)
     pd = PD.from_legacy_list(loaded["gfvt4K_200mM_Z0"])
+    pd_full = PD.from_legacy_list(loaded["gfvt4K_200mM_Z0_full"])
 
     plot_calls = [
         lambda ax: pd.molplot("PEG 4K, ", "orange", ax=ax),
@@ -160,6 +161,20 @@ def test_pd_plotting_methods_return_axes():
         lambda ax: pd.molplot("PEG 4K, ", "orange", ax=ax, plim=np.inf),
         lambda ax: pd.molplot_phi_analytical("PEG 4K, ", "orange", crit_color="red", ax=ax),
         lambda ax: pd.molplot_analytical("PEG 4K, ", "orange", crit_color="red", ax=ax),
+        lambda ax: pd_full.d_Rg("orange", "PEG 4K", ax=ax, plim=60, n_points=1000),
+        lambda ax: pd_full.pi_scale("orange", "PEG 4K", ax=ax, plim=60, n_points=1000),
+        lambda ax: pd_full.a_plot("orange", "PEG 4K", ax=ax),
+        lambda ax: pd_full.a_plot_peg("orange", "PEG 4K", ax=ax),
+        lambda ax: pd_full.g_plot("orange", "PEG 4K", ax=ax),
+        lambda ax: pd_full.h_plot("orange", "PEG 4K", ax=ax),
+        lambda ax: pd_full.mu_plot("orange", "PEG 4K", ax=ax, plim=60),
+        lambda ax: pd_full.mu_plot(
+            "orange",
+            "PEG 4K",
+            ax=ax,
+            depletion=True,
+            reference_band=True,
+        ),
     ]
 
     for plot_call in plot_calls:
@@ -168,6 +183,13 @@ def test_pd_plotting_methods_return_axes():
         assert returned is ax
         assert len(ax.lines) > 0 or len(ax.collections) > 0
         plt.close(fig)
+
+    fig, axes = plt.subplots(1, 3)
+    returned = pd_full.Pi_Mu_a_plots(axes, "orange", "PEG 4K")
+    assert returned is axes
+    for ax in axes:
+        assert len(ax.lines) > 0 or len(ax.collections) > 0
+    plt.close(fig)
 
 
 def test_pd_data_plotting_methods_return_axes():
