@@ -1,1 +1,37 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
 src/gfvt.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/GFVT_all_RFVT.ipynb
+notebooks/GFVT_all.ipynb
+
+# Environment / secrets
+.env
+*.key
+
+# Data / output folders
+
+data/Old
+*MBP*.csv
+*GFP*.csv
+*SUMO*.csv
+
+*.xlsx
+!PEG_BSA_MW_Data.xlsx
+
+output/
+
+pickles/260319_output.pkl
+pickles/260424_output.pkl
+pickles/260513_output.pkl
+pickles/260514_output.pkl
+pickles/260610_output.pkl
