@@ -148,6 +148,52 @@ def test_gfvt_small_run_matches_legacy_critical_and_triple_points():
     np.testing.assert_allclose(pd.PhiP_max, legacy[-1][7], rtol=1e-12, atol=1e-12)
 
 
+def test_molplot_uses_crit_color_when_cp_list_is_empty():
+    pd = PD(
+        3.0e-9,
+        1.9e-9,
+        66.4,
+        4,
+        "good",
+        3,
+        [0.24, 0.7],
+        progress=False,
+        verbose=False,
+    )
+    pd.GFVT(critical=False)
+
+    fig, ax = plt.subplots()
+    pd.molplot("PEG 4K, ", "orange", crit_color="red", ax=ax)
+
+    labels = [line.get_label() for line in ax.lines] + [collection.get_label() for collection in ax.collections]
+    assert any("critical" in label for label in labels if label)
+    plt.close(fig)
+
+
+def test_molplot_phi_falls_back_when_phix_scales_are_missing():
+    pd = PD(
+        3.0e-9,
+        1.9e-9,
+        66.4,
+        4,
+        "good",
+        3,
+        [0.24, 0.7],
+        progress=False,
+        verbose=False,
+    )
+    pd.GFVT(critical=False)
+    pd.phix_bsa = None
+    pd.phix_peg = None
+
+    fig, ax = plt.subplots()
+    returned = pd.molplot_phi("PEG 4K, ", "orange", ax=ax)
+
+    assert returned is ax
+    assert len(ax.lines) > 0 or len(ax.collections) > 0
+    plt.close(fig)
+
+
 def test_pd_plotting_methods_return_axes():
     with PICKLE_PATH.open("rb") as handle:
         loaded = pickle.load(handle)

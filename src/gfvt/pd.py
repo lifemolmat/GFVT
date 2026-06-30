@@ -828,14 +828,19 @@ class PD:
         mpeg=0,
         n_tie=False,
         plot_tot=False,
-        gamma=1 / (3 - 1 / 0.6379),
+        gamma=None,
         show_legend=False,
     ):
         """Plot experimental CSV data in volume-fraction coordinates."""
         self._require_results()
         ax = self._get_axis(ax)
         q = self.Rpol_in / self.Rpr_in
-        qq = 1 if gamma == 0 else q ** -(1 / gamma)
+        # qq = 1 if gamma is Nonw else q ** -(1 / gamma)
+        if gamma is None:
+            qq = 1
+        else:
+            gamma = 1 / (3 - 1 / 0.6379)
+            qq = q ** -(1 / gamma)
         mbsa = self.mbsa if mbsa == 0 else mbsa
         mpeg = self.mpeg if mpeg == 0 else mpeg
 
@@ -944,38 +949,40 @@ class PD:
         crit_color=False,
         FVT_color=False,
         n_tie=0,
-        mbsa=0,
-        mpeg=0,
-        gamma=1 / (3 - 1 / 0.6379),
+        gamma=None,
         show_legend=False,
-        mass=False,
+
     ):
         """Plot the GFVT binodal in volume-fraction coordinates."""
         self._require_results()
         self._reject_fvt_overlay(FVT_color)
         ax = self._get_axis(ax)
-        mbsa, mpeg = self._plot_masses(mbsa, mpeg)
         full_label = self._full_label(plabel)
-        q = self.Rpol_in / self.Rpr_in
-        qq = q ** -(1 / gamma)
-
-        if mass:
-            b_bsa_A = self.Pr_Drop_p * mbsa
-            b_bsa_B = self.Pr_Sup_p * mbsa
-            b_PEG_A = qq * self.Pol_Drop_p * mpeg
-            b_PEG_B = qq * self.Pol_Sup_p * mpeg
-            c_bsa = self.cp[0] * mbsa
-            c_PEG = qq * self.cp[1] * mpeg
+        q = self.q
+        phix_bsa, phix_peg = self._get_phix_scales()
+        
+        if gamma is None:
+            qq = 1
         else:
-            b_bsa_A = self.Pr_Drop_p / self.phix_bsa
-            b_bsa_B = self.Pr_Sup_p / self.phix_bsa
-            b_PEG_A = qq * self.Pol_Drop_p / self.phix_peg
-            b_PEG_B = qq * self.Pol_Sup_p / self.phix_peg
-            c_bsa = self.cp[0] / self.phix_bsa
-            c_PEG = qq * self.cp[1] / self.phix_peg
+            gamma = 1 / (3 - 1 / 0.6379)
+            qq = q ** -(1 / gamma)
+            print(f'gamma: {gamma}')
 
-        self._plot_binodal_lines(ax, b_bsa_A, b_PEG_A, b_bsa_B, b_PEG_B, pcolor, full_label)
-        self._plot_tie_lines(ax, b_bsa_A, b_PEG_A, b_bsa_B, b_PEG_B, pcolor, n_tie)
+        b_bsa_Drop = self.Pr_Drop_p / phix_bsa
+        b_bsa_Sup = self.Pr_Sup_p / phix_bsa
+        b_PEG_Drop = qq * self.Pol_Drop_p / phix_peg
+        b_PEG_Sup = qq * self.Pol_Sup_p / phix_peg
+        c_bsa = self.cp[0] / phix_bsa
+        c_PEG = qq * self.cp[1] / phix_peg
+
+        b_PEG_A = np.asarray([R*A*qq for R, A in zip(self.phi_R, self.a_Drop_p)]) 
+        b_PEG_B = np.asarray([R*A*qq for R, A in zip(self.phi_R, self.a_Sup_p)]) 
+
+        ax.plot(b_bsa_Drop, b_PEG_A, "--", color='black', linewidth=2)
+        ax.plot(b_bsa_Sup, b_PEG_B, "--", color='black', linewidth=2)
+
+        self._plot_binodal_lines(ax, b_bsa_Drop, b_PEG_Drop, b_bsa_Sup, b_PEG_Sup, pcolor, full_label)
+        self._plot_tie_lines(ax, b_bsa_Drop, b_PEG_Drop, b_bsa_Sup, b_PEG_Sup, pcolor, n_tie)
         self._plot_phi_critical_lines(ax, crit_color, full_label, gamma=gamma)
         ax.scatter(c_bsa, c_PEG, s=300, color=pcolor, marker="*", label=full_label + " critical")
         self._maybe_legend(ax, show_legend)
@@ -997,11 +1004,13 @@ class PD:
         ax = self._get_axis(ax)
         full_label = self._full_label(plabel)
         q = self.Rpol_in / self.Rpr_in
+        phix_bsa, phix_peg = self._get_phix_scales()
         gamma, _, qq, y_a_L, bsa_a_L, bsa_a_G = self._analytical_base_curves()
+        qq = 1
         color = crit_color or pcolor
 
-        b_bsa_A = self.Pr_Drop_p / self.phix_bsa
-        b_bsa_B = self.Pr_Sup_p / self.phix_bsa
+        b_bsa_A = self.Pr_Drop_p / phix_bsa
+        b_bsa_B = self.Pr_Sup_p / phix_bsa
         b_PEG_A = np.asarray(self.phi_R) * qq
         b_PEG_B = np.asarray(self.phi_R) * qq
 
@@ -1029,12 +1038,13 @@ class PD:
         ax = self._get_axis(ax)
         full_label = self._full_label(plabel)
         color = crit_color or pcolor
+        phix_bsa, phix_peg = self._get_phix_scales()
         _, _, _, y_a_L, bsa_a_L, bsa_a_G = self._analytical_base_curves()
 
-        b_bsa_A = self.Pr_Drop_p / self.phix_bsa
-        b_bsa_B = self.Pr_Sup_p / self.phix_bsa
-        b_PEG_A = self.Pol_Drop_p / self.phix_peg
-        b_PEG_B = self.Pol_Sup_p / self.phix_peg
+        b_bsa_A = self.Pr_Drop_p / phix_bsa
+        b_bsa_B = self.Pr_Sup_p / phix_bsa
+        b_PEG_A = self.Pol_Drop_p / phix_peg
+        b_PEG_B = self.Pol_Sup_p / phix_peg
         phi_a_L = [self._alpha(Phi, Phi_pol) * Phi_pol for Phi_pol, Phi in zip(y_a_L, bsa_a_L)]
         phi_a_G = [self._alpha(Phi, Phi_pol) * Phi_pol for Phi_pol, Phi in zip(y_a_L, bsa_a_G)]
 
@@ -1544,8 +1554,16 @@ class PD:
     def _plot_masses(self, mbsa, mpeg):
         return (self.mbsa if mbsa == 0 else mbsa, self.mpeg if mpeg == 0 else mpeg)
 
+    def _get_phix_scales(self) -> tuple[float, float]:
+        if self.phix_bsa is not None and self.phix_peg is not None:
+            return float(self.phix_bsa), float(self.phix_peg)
+
+        vbsa = 4 / 3 * np.pi * self.Rpr_in**3 * 6.022e23
+        vpeg = 4 / 3 * np.pi * self.Rpol_in**3 * 6.022e23
+        return 1 / vbsa, 1 / vpeg
+
     def _full_label(self, plabel) -> str:
-        return plabel + f"Rbsa = {self.Rpr_in * 1e9:.2f} nm, Rp = {self.Rpol_in * 1e9:.2f} nm"
+        return plabel + f"q = {self.q:.1f}, Rbsa = {self.Rpr_in * 1e9:.2f} nm, Rp = {self.Rpol_in * 1e9:.2f} nm"
 
     @staticmethod
     def _plot_binodal_lines(ax, x_drop, y_drop, x_sup, y_sup, pcolor, full_label) -> None:
@@ -1560,70 +1578,99 @@ class PD:
             ax.plot([x_drop[idx], x_sup[idx]], [y_drop[idx], y_sup[idx]], "--", color=pcolor)
 
     def _plot_critical_lines(self, ax, crit_color, full_label, *, mass=False, mbsa=1, mpeg=1) -> None:
-        if not crit_color or self.cp_list is None or len(self.cp_list) == 0:
+        if not crit_color:
             return
-        cp_list = np.asarray(self.cp_list)
-        q_clist, Rpr_clist, Rpol_clist, phix_peg_clist, crit1_clist, crit2_clist, Pr_Crit_clist, Pol_Crit_clist = cp_list.T
-        x = Pr_Crit_clist * mbsa if mass else Pr_Crit_clist
-        y = Pol_Crit_clist * mpeg if mass else Pol_Crit_clist
-        ax.plot(x, y, "--", color=crit_color, ms=2, label=full_label + " critical line")
-        ax.scatter(x[-1], y[-1], color=crit_color, marker="o", s=100, label=full_label + " critical line")
 
-        if self.tp_list is None or len(self.tp_list) == 0:
-            return
-        tp_list = np.asarray(self.tp_list)
-        _, _, _, _, tp1, tp2, tp3, tp4, Pr_tp1, Pr_tp2, Pr_tp3, Pol_tp1, Pol_tp2, Pol_tp3 = tp_list.T
-        for idx, (tp_x, tp_y) in enumerate(
-            (
-                (Pr_tp1, Pol_tp1),
-                (Pr_tp2, Pol_tp2),
-                (Pr_tp3, Pol_tp3),
-            ),
-            start=1,
-        ):
-            x = tp_x * mbsa if mass else tp_x
-            y = tp_y * mpeg if mass else tp_y
-            ax.plot(x, y, "-", color=crit_color, markersize=6, label=full_label + f" triple line {idx}")
+        phix_bsa, phix_peg = self._get_phix_scales()
 
-    def _plot_phi_critical_lines(self, ax, crit_color, full_label, *, gamma) -> None:
-        if not crit_color or self.cp_list is None or len(self.cp_list) == 0:
+        if self.cp_list is not None and len(self.cp_list) > 0:
+            cp_list = np.asarray(self.cp_list)
+            q_clist, Rpr_clist, Rpol_clist, phix_peg_clist, crit1_clist, crit2_clist, Pr_Crit_clist, Pol_Crit_clist = cp_list.T
+            x = Pr_Crit_clist * mbsa if mass else Pr_Crit_clist
+            y = Pol_Crit_clist * mpeg if mass else Pol_Crit_clist
+            ax.plot(x, y, "--", color=crit_color, ms=2, label=full_label + " critical line")
+
+            if self.tp_list is None or len(self.tp_list) == 0:
+                return
+            tp_list = np.asarray(self.tp_list)
+            _, _, _, _, tp1, tp2, tp3, tp4, Pr_tp1, Pr_tp2, Pr_tp3, Pol_tp1, Pol_tp2, Pol_tp3 = tp_list.T
+            for idx, (tp_x, tp_y) in enumerate(
+                (
+                    (Pr_tp1, Pol_tp1),
+                    (Pr_tp2, Pol_tp2),
+                    (Pr_tp3, Pol_tp3),
+                ),
+                start=1,
+            ):
+                x = tp_x * mbsa if mass else tp_x
+                y = tp_y * mpeg if mass else tp_y
+                ax.plot(x, y, "-", color=crit_color, markersize=6, label=full_label + f" triple line {idx}")
+        
+        if self.tp is None or len(self.tp) < 6:
             return
-        cp_list = np.asarray(self.cp_list)
-        q_clist, Rpr_clist, Rpol_clist, phix_peg_clist, crit1_clist, crit2_clist, Pr_Crit_clist, Pol_Crit_clist = cp_list.T
-        ax.plot(
-            [pr / self.phix_bsa for pr in Pr_Crit_clist],
-            [q_item ** (-1 / gamma) * pol / phix for pol, phix, q_item in zip(Pol_Crit_clist, phix_peg_clist, q_clist)],
-            "--",
-            color=crit_color,
-            ms=2,
-            label=full_label + " critical line",
-        )
+
         ax.scatter(
-            Pr_Crit_clist[-1] / self.phix_bsa,
-            q_clist[-1] ** (-1 / gamma) * Pol_Crit_clist[-1] / phix_peg_clist[-1],
+            [t / phix_bsa for t in self.tp[0:3]],
+            [t / phix_peg for t in self.tp[3:6]],
             color=crit_color,
             marker="o",
-            s=100,
-            label=full_label + " critical line",
-        )
+            s=60,
+            label=full_label + f" triple point",
+            )    
+            
 
-        if self.tp_list is None or len(self.tp_list) == 0:
+    def _plot_phi_critical_lines(self, ax, crit_color, full_label, *, gamma) -> None:
+        if not crit_color:
             return
-        tp_list = np.asarray(self.tp_list)
-        q_tlist, _, _, phix_peg_tlist, tp1, tp2, tp3, tp4, Pr_tp1, Pr_tp2, Pr_tp3, Pol_tp1, Pol_tp2, Pol_tp3 = tp_list.T
-        for idx, (tp_x, tp_y) in enumerate(
-            (
-                (Pr_tp1, Pol_tp1),
-                (Pr_tp2, Pol_tp2),
-                (Pr_tp3, Pol_tp3),
-            ),
-            start=1,
-        ):
+
+        if gamma is None:
+            qexp = 0
+        else:
+            qexp = -1 / gamma
+
+        phix_bsa, phix_peg = self._get_phix_scales()
+
+        if self.cp_list is not None and len(self.cp_list) > 0:
+            cp_list = np.asarray(self.cp_list)
+            q_clist, Rpr_clist, Rpol_clist, phix_peg_clist, crit1_clist, crit2_clist, Pr_Crit_clist, Pol_Crit_clist = cp_list.T
             ax.plot(
-                tp_x / self.phix_bsa,
-                [q_item ** (-1 / gamma) * pol / phix for pol, phix, q_item in zip(tp_y, phix_peg_tlist, q_tlist)],
+                [pr / phix_bsa for pr in Pr_Crit_clist],
+                [q_item ** qexp * pol / phix for pol, phix, q_item in zip(Pol_Crit_clist, phix_peg_clist, q_clist)],
+                "--",
                 color=crit_color,
-                label=full_label + f" triple line {idx}",
+                ms=2,
+                label=full_label + " critical line",
+            )
+
+            if self.tp_list is None or len(self.tp_list) == 0:
+                return
+            tp_list = np.asarray(self.tp_list)
+            q_tlist, _, _, phix_peg_tlist, tp1, tp2, tp3, tp4, Pr_tp1, Pr_tp2, Pr_tp3, Pol_tp1, Pol_tp2, Pol_tp3 = tp_list.T
+            for idx, (tp_x, tp_y) in enumerate(
+                (
+                    (Pr_tp1, Pol_tp1),
+                    (Pr_tp2, Pol_tp2),
+                    (Pr_tp3, Pol_tp3),
+                ),
+                start=1,
+            ):
+                ax.plot(
+                    tp_x / phix_bsa,
+                    [q_item ** qexp * pol / phix for pol, phix, q_item in zip(tp_y, phix_peg_tlist, q_tlist)],
+                    color=crit_color,
+                    label=full_label + f" triple line {idx}",
+                )
+
+        if self.tp is None or len(self.tp) < 6:
+            return
+
+        ax.scatter(
+            [self.q ** qexp * t / phix_bsa for t in self.tp[0:3]],
+            [self.q ** qexp * t / phix_peg for t in self.tp[3:6]],
+            color=crit_color,
+            marker="o",
+            s=60,
+            label=full_label + f" triple point",
             )
 
     def _qxf(self, q, Phi_pol):
