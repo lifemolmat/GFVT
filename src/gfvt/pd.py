@@ -1415,6 +1415,15 @@ class PD:
             ax.legend(loc=(1.1, 0), fontsize="x-large")
 
     @staticmethod
+    def _nonzero_data_points(x, y, xerr, yerr):
+        x = np.asarray(x)
+        y = np.asarray(y)
+        xerr = np.broadcast_to(np.asarray(xerr), x.shape)
+        yerr = np.broadcast_to(np.asarray(yerr), y.shape)
+        mask = (x != 0) & (y != 0)
+        return x[mask], y[mask], xerr[mask], yerr[mask], mask
+
+    @staticmethod
     def _parse_binodal_data(
         data,
         *,
@@ -1481,6 +1490,40 @@ class PD:
         n_tie=False,
         plot_tot=False,
     ) -> None:
+        BN_BSA_sup_all = np.asarray(BN_BSA_sup)
+        BN_PEG_sup_all = np.asarray(BN_PEG_sup)
+        BN_BSA_drop_all = np.asarray(BN_BSA_drop)
+        BN_PEG_drop_all = np.asarray(BN_PEG_drop)
+
+        (
+            BN_BSA_sup,
+            BN_PEG_sup,
+            BN_BSA_sup_err,
+            BN_PEG_sup_err,
+            sup_mask,
+        ) = PD._nonzero_data_points(BN_BSA_sup, BN_PEG_sup, BN_BSA_sup_err, BN_PEG_sup_err)
+        (
+            BN_BSA_drop,
+            BN_PEG_drop,
+            BN_BSA_drop_err,
+            BN_PEG_drop_err,
+            drop_mask,
+        ) = PD._nonzero_data_points(BN_BSA_drop, BN_PEG_drop, BN_BSA_drop_err, BN_PEG_drop_err)
+        (
+            CP_BSA,
+            CP_PEG,
+            CP_BSA_err,
+            CP_PEG_err,
+            _,
+        ) = PD._nonzero_data_points(CP_BSA, CP_PEG, CP_BSA_err, CP_PEG_err)
+        (
+            BN_BSA_tot,
+            BN_PEG_tot,
+            BN_BSA_tot_err,
+            BN_PEG_tot_err,
+            _,
+        ) = PD._nonzero_data_points(BN_BSA_tot, BN_PEG_tot, BN_BSA_tot_err, BN_PEG_tot_err)
+
         ax.errorbar(
             BN_BSA_sup,
             BN_PEG_sup,
@@ -1534,10 +1577,15 @@ class PD:
                 label=plabel + " binodal",
             )
         if n_tie:
-            for idx in range(len(BN_BSA_sup)):
+            tie_mask = sup_mask & drop_mask
+            tie_bsa_sup = BN_BSA_sup_all[tie_mask]
+            tie_peg_sup = BN_PEG_sup_all[tie_mask]
+            tie_bsa_drop = BN_BSA_drop_all[tie_mask]
+            tie_peg_drop = BN_PEG_drop_all[tie_mask]
+            for idx in range(len(tie_bsa_sup)):
                 ax.plot(
-                    [BN_BSA_sup[idx], BN_BSA_drop[idx]],
-                    [BN_PEG_sup[idx], BN_PEG_drop[idx]],
+                    [tie_bsa_sup[idx], tie_bsa_drop[idx]],
+                    [tie_peg_sup[idx], tie_peg_drop[idx]],
                     "--",
                     color=pcolor,
                 )

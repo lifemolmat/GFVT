@@ -255,3 +255,42 @@ def test_pd_data_plotting_methods_return_axes():
     assert returned is ax
     assert len(ax.lines) > 0 or len(ax.collections) > 0
     plt.close(fig)
+
+
+def test_pd_data_plotting_methods_skip_zero_points():
+    with PICKLE_PATH.open("rb") as handle:
+        loaded = pickle.load(handle)
+    pd = PD.from_legacy_list(loaded["gfvt4K_200mM_Z0"])
+    data = np.array(
+        [
+            [10, 1, 2, 0.1, 20, 0.2, 100, 1, 12, 0.1, 30, 0.2, 5, 0.5, 50, 0.5],
+            [0, 1, 0, 0.1, 25, 0.2, 0, 1, 0, 0.1, 35, 0.2, 0, 0, 0, 0],
+            [12, 1, 3, 0.1, 0, 0.2, 120, 1, 18, 0.1, 0, 0.2, 0, 0, 0, 0],
+        ],
+        dtype=float,
+    )
+
+    for plot_call in (
+        lambda ax: PD.molplot_dat_err_csv(data, "PEG 4K", "orange", ax=ax, n_tie=True, plot_tot=True),
+        lambda ax: pd.molplot_dat_err_csv_phi(data, "PEG 4K", "orange", ax=ax, n_tie=True, plot_tot=True),
+    ):
+        fig, ax = plt.subplots()
+        plot_call(ax)
+        marker_lines = [line for line in ax.lines if line.get_marker() in {"o", "X"}]
+        plotted_points = [
+            (x, y)
+            for line in marker_lines
+            for x, y in zip(line.get_xdata(), line.get_ydata())
+        ]
+        tie_lines = [line for line in ax.lines if line.get_linestyle() == "--"]
+        tie_points = [
+            (x, y)
+            for line in tie_lines
+            for x, y in zip(line.get_xdata(), line.get_ydata())
+        ]
+
+        assert plotted_points
+        assert all(x != 0 and y != 0 for x, y in plotted_points)
+        assert tie_points
+        assert all(x != 0 and y != 0 for x, y in tie_points)
+        plt.close(fig)
